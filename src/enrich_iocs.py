@@ -39,6 +39,25 @@ WL_POLICY = "/home/mike/etc/warninglist_policy.json"
 # IOC feeds, but for a honeynet they are frequently real attacker infra.
 DEFAULT_ANNOTATE_ONLY = ["vpn-ipv4", "datacenter", "VPN providers"]
 
+# Analyzers to run per observable type. Must be explicit — see submit().
+ANALYZERS = {
+    # Shodan_Search, not Shodan_Honeyscore — the /labs/honeyscore/ endpoint is
+    # retired and always 400s. Shodan_Search 404s when Shodan simply has no
+    # data for a host, which IntelOwl records as FAILED; that is normal.
+    "ip": ["AbuseIPDB", "OTXQuery", "Shodan_Search", "MaxMindGeoIP",
+           "VirusTotal_v3_Get_Observable", "MISP"],
+    "hash": ["OTXQuery", "VirusTotal_v3_Get_Observable", "MISP"],
+}
+
+# Hashes of empty/trivial files that honeypots capture constantly. Enriching
+# these wastes quota and pollutes reports.
+JUNK_HASHES = {
+    # sha256 / sha1 / md5 of the empty file
+    "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "da39a3ee5e6b4b0d3255bfef95601890afd80709",
+    "d41d8cd98f00b204e9800998ecf8427e",
+}
+
 _NOVERIFY = ssl.create_default_context()
 _NOVERIFY.check_hostname = False
 _NOVERIFY.verify_mode = ssl.CERT_NONE
@@ -139,9 +158,12 @@ def ledger_conn():
 
 
 def submit(observable, classification):
+    # IntelOwl runs nothing if analyzers_requested is omitted ("No Analyzers
+    # and Connectors can be run after filtering"), so name them explicitly.
     body = json.dumps({
         "observable_name": observable,
         "observable_classification": classification,
+        "analyzers_requested": ANALYZERS[classification],
         "tlp": "AMBER",
     }).encode()
     req = urllib.request.Request(
@@ -167,7 +189,8 @@ def main():
     raw_ips, hashes = collect_iocs(args.hours, args.max_ips)
     nets, own_ips = load_homenet()
 
-    dropped = {"reserved": [], "own": [], "warninglist": [], "ledger": []}
+    dropped = {"reserved": [], "own": [], "warninglist": [], "junk_hash": [],
+               "ledger": []}
     candidates = []
     for ip, count in raw_ips:
         if is_reserved(ip):
@@ -202,8 +225,10 @@ def main():
     novel = [ip for ip in candidates if ip not in seen]
     dropped["ledger"] = [ip for ip in candidates if ip in seen]
 
-    novel_hashes = [h for h, _ in hashes if h not in seen]
-    dropped["ledger"] += [h for h, _ in hashes if h in seen]
+    dropped["junk_hash"] = [h for h, _ in hashes if h in JUNK_HASHES]
+    real_hashes = [h for h, _ in hashes if h not in JUNK_HASHES]
+    novel_hashes = [h for h in real_hashes if h not in seen]
+    dropped["ledger"] += [h for h in real_hashes if h in seen]
 
     print(f"collected {len(raw_ips)} IPs + {len(hashes)} hashes")
     for reason, items in dropped.items():

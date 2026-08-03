@@ -1,12 +1,8 @@
 {
-  "_comment": "Operator-owned infrastructure. NEVER submitted to IntelOwl or shared to OTX/MISP/AbuseIPDB. Seeded from t-pot_ip_ext values observed in Elasticsearch. Verify and extend with your real allocations.",
-  "networks": [],
-  "ips": [
-    "99.18.26.18",
-    "99.18.26.19",
-    "99.18.26.20",
-    "99.18.26.21",
-    "76.165.200.191",
-    "76.165.200.8"
-  ]
+  "_comment": "Operator-owned infrastructure. NEVER submitted to IntelOwl or shared to OTX/MISP/AbuseIPDB. Confirmed by operator 2026-08-03.",
+  "networks": [
+    "76.165.200.0/24",
+    "99.18.26.16/29"
+  ],
+  "ips": []
 }

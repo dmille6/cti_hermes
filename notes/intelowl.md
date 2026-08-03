@@ -111,8 +111,38 @@ warninglist is dropped.
 Example configs live in `src/etc.example/` (the real ones hold secrets and
 stay on the VM).
 
+## First live enrichment run (2026-08-03)
+
+34 jobs submitted (10 IPs + 24 hashes). Filters dropped: 1 own-infrastructure
+IP (`76.165.200.190`, 340k events — operator-confirmed as theirs), 1 junk hash
+(sha256 of the empty file). 6 datacenter IPs annotated but still enriched.
+
+Analyzer status after fixes:
+
+| Analyzer | Result |
+|---|---|
+| AbuseIPDB | ✅ working |
+| OTXQuery | ✅ working (ip + hash) |
+| VirusTotal_v3_Get_Observable | ✅ working (GTI key) |
+| MISP | ✅ working after `ssl_check=False` + `self_signed_certificate=True` |
+| MaxMindGeoIP | ✅ working (first runs fail while it downloads the GeoLite2 DBs) |
+| Shodan_Search | ✅ working; 404 = Shodan has no data for that host (recorded as FAILED, normal) |
+| Shodan_Honeyscore | ❌ retired upstream — `/labs/honeyscore/` always 400s. Do not use. |
+
+### Submission gotcha
+
+`analyzers_requested` **must** be specified. Omitting it returns
+`400 {"errors":{"detail":["No Analyzers and Connectors can be run after
+filtering:"]}}` — IntelOwl filters the default set down to nothing. See
+`ANALYZERS` in `src/enrich_iocs.py`.
+
+### Note
+
+IntelOwl embeds API keys in analyzer error messages (e.g. the full Shodan URL
+with `?key=...` appears in job error output). Treat job errors as sensitive;
+don't paste them into tickets or share job JSON externally.
+
 ## Next
 
 - Enable IntelOwl connectors to push results into MISP and OpenCTI.
 - Join enrichment output into the daily brief.
-- Confirm the homenet list is complete before any outbound sharing.
