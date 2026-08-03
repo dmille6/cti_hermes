@@ -13,7 +13,7 @@ produce intelligence reports and findings — all inference local via Ollama.
 | Mac Studio | M4 Max, 128 GB RAM | Primary reasoning/report model (large model via Ollama) |
 | Linux #1 | RTX 5080, 16 GB VRAM | Fast small-model tasks: IOC extraction, enrichment, embeddings |
 | Linux #2 | RTX A6000, 48 GB VRAM | Workhorse mid/large model (pending setup) |
-| Agent server | TBD (own box/VM) | Hermes Agent + MCP servers; talks to Ollama over OpenAI-compatible API |
+| Agent server | VM `ctihermes` @ 10.0.0.120 — 8 vCPU, 16 GB RAM, 195 GB disk, Ubuntu 24.04 | Hermes Agent + IntelOwl + MCP servers; talks to Ollama over OpenAI-compatible API |
 
 Existing services: T-Pot hive (ELK stack), OpenCTI server, MISP instance.
 External feeds: AlienVault OTX, CrowdStrike Falcon, Google Threat
@@ -122,6 +122,10 @@ Full review: `notes/reviews/2026-08-03-chatgpt-codex.md`. Accepted changes:
 
 ## Open questions
 
-- Which box hosts the agent server (VM on one of the Linux hosts?).
+- ~~Which box hosts the agent server~~ → VM `ctihermes` @ 10.0.0.120 (done).
 - Elastic version on T-Pot → decides which ES MCP server to use.
-- Report template/format for `notes/reports/`.
+- Report template/format for `notes/reports/` → start from templates in
+  `notes/reviews/2026-08-03-chatgpt-codex.md`.
+- DHCP reservation / static IP for 10.0.0.120.
+- SSH password auth still enabled on ctihermes — decide whether to disable
+  (key auth from the Mac Studio is set up and working).
