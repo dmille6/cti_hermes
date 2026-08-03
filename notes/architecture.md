@@ -123,7 +123,11 @@ Full review: `notes/reviews/2026-08-03-chatgpt-codex.md`. Accepted changes:
 ## Open questions
 
 - ~~Which box hosts the agent server~~ → VM `ctihermes` @ 10.0.0.120 (done).
-- Elastic version on T-Pot → decides which ES MCP server to use.
+- ~~Elastic version on T-Pot~~ → ES 9.3.5 @ 10.0.0.75:64298 (no auth,
+  LAN-only); official elastic MCP server works (done). OpenCTI is 6.9.16 @
+  feed.digitalplumbing.net:8080; running archived-but-working FiligranHQ
+  xtm-mcp from ~/mcp/xtm-mcp on the VM — revisit when OpenCTI ships its
+  embedded MCP endpoint.
 - Report template/format for `notes/reports/` → start from templates in
   `notes/reviews/2026-08-03-chatgpt-codex.md`.
 - DHCP reservation / static IP for 10.0.0.120.
