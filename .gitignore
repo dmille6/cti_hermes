@@ -1,0 +1,26 @@
+# OS cruft
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# Node
+node_modules/
+
+# Env / secrets — never commit credentials
+.env
+.env.*
+*.pem
+*.key
+
+# Local-only tool state
+.claude/settings.local.json
