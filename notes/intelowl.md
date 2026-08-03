@@ -1,0 +1,89 @@
+# IntelOwl deployment (ctihermes, 2026-08-03)
+
+IntelOwl **v6.7.0** running via Docker Compose on `ctihermes` (10.0.0.120).
+
+## Access
+
+- Web UI: `http://10.0.0.120/` (nginx on port 80)
+- Admin user: `admin` / password in `~/.intelowl_admin_pw` on the VM (chmod 600)
+- API token: `~/.intelowl_token` on the VM (chmod 600)
+
+Containers: nginx, uwsgi, daphne, celery_worker_default, celery_beat,
+postgres, redis. Managed from `~/intelowl`:
+
+```
+cd ~/intelowl && ./start prod up -- -d      # start
+cd ~/intelowl && ./start prod down          # stop
+```
+
+## Install notes / gotchas
+
+- `./initialize.sh` needs sudo (installs Docker + logrotate). Docker was
+  already present, so we skipped it and copied the env templates by hand:
+  `env_file_app`, `env_file_postgres`, `env_file_integrations`,
+  `.env.start.test`. `DJANGO_SECRET`, `POSTGRES_PASSWORD`, and `DB_PASSWORD`
+  were then generated with `secrets`.
+- Superuser creation requires `--first_name`/`--last_name` with `--noinput`.
+- **API tokens: IntelOwl uses DRF's `rest_framework.authtoken`, NOT durin.**
+  Durin's `AuthToken` exists in the codebase and validates fine through the
+  ORM, but `DEFAULT_AUTHENTICATION_CLASSES` is
+  `rest_framework.authentication.TokenAuthentication`, so a durin token gets
+  a flat `{"detail": "Invalid token."}` over HTTP. Create tokens with:
+  `Token.objects.create(user=u)` from `rest_framework.authtoken.models`.
+- Analyzer secrets live in the **database** (`PluginConfig`), not env files.
+  `PluginConfig` requires exactly one of `analyzer_config` / `connector_config`
+  / `visualizer_config` / `ingestor_config` / `pivot_config` to be set, or
+  `clean_config()` raises "You must select a plugin configuration".
+  `src/configure_intelowl.py` handles this.
+
+## Configured analyzers
+
+Loaded from the operator's `env/env` (gitignored) via
+`src/configure_intelowl.py`, then the staging copy was deleted:
+
+| Analyzer | Parameter | Status |
+|---|---|---|
+| AbuseIPDB | api_key_name | ✅ verified returning data |
+| OTXQuery | api_key_name | ✅ verified returning pulses |
+| OTX_Check_Hash | api_key_name | ✅ |
+| VirusTotal_v3_Get_Observable | api_key_name (GTI key) | ✅ |
+| VirusTotal_v3_Intelligence_Search | api_key_name (GTI key) | ✅ |
+| Shodan_Honeyscore | api_key_name | ✅ |
+| Shodan_Search | api_key_name | ✅ |
+| MaxMindGeoIP | api_key_name | ✅ |
+| MISP | api_key_name + url_key_name | ✅ |
+
+**GreyNoise deliberately excluded** — operator's subscription lapsed.
+
+Not configured:
+- **Censys** — `CENSYS_API_ID` / `CENSYS_API_SECRET` are present but **empty**
+  in `env/env`. Populate them there and re-run `configure_intelowl.py` to
+  enable `Censys_Search`.
+- **MalwareBazaar** — the analyzer exposes no `api_key_name` parameter in
+  v6.7.0 (it works unauthenticated); the key in `env/env` is unused here.
+- **CrowdStrike** — no IntelOwl analyzer; use `falcon-mcp` for Falcon intel.
+
+## Enrichment bridge
+
+`src/enrich_iocs.py` (deployed to `~/bin/enrich_iocs.py`) is the deterministic
+ingest path — **no LLM in this flow**:
+
+1. Aggregate top source IPs and file hashes from T-Pot ES over a time window.
+2. Drop RFC1918/reserved ranges.
+3. Skip anything already enriched (sqlite ledger at
+   `~/reports/ioc_ledger.sqlite`) so repeat offenders don't burn API quota.
+4. Submit the remainder to IntelOwl, one per second.
+5. Write `~/reports/enrichment/YYYY-MM-DD-submissions.json` for the report
+   stage to join against.
+
+```bash
+python3 ~/bin/enrich_iocs.py --dry-run --max-ips 5   # preview
+python3 ~/bin/enrich_iocs.py --hours 24 --max-ips 25 # real run
+```
+
+## Next
+
+- Wire MISP warninglist pre-filtering ahead of submission (avoid enriching
+  known-benign scanners/cloud ranges).
+- Enable IntelOwl connectors to push results into MISP and OpenCTI.
+- Join enrichment output into the daily brief.
