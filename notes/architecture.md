@@ -15,8 +15,9 @@ produce intelligence reports and findings — all inference local via Ollama.
 | Linux #2 | RTX A6000, 48 GB VRAM | Workhorse mid/large model (pending setup) |
 | Agent server | TBD (own box/VM) | Hermes Agent + MCP servers; talks to Ollama over OpenAI-compatible API |
 
-Existing services: T-Pot hive (ELK stack), OpenCTI server. External feeds:
-AlienVault OTX, CrowdStrike Falcon, Google Threat Intelligence.
+Existing services: T-Pot hive (ELK stack), OpenCTI server, MISP instance.
+External feeds: AlienVault OTX, CrowdStrike Falcon, Google Threat
+Intelligence.
 
 ## Agent framework: Hermes Agent (NousResearch)
 
@@ -49,12 +50,36 @@ AlienVault OTX, CrowdStrike Falcon, Google Threat Intelligence.
 - Optional: LiteLLM proxy on the agent server as a single OpenAI-compatible
   gateway routing to all three Ollama hosts.
 
+## Enrichment layer: IntelOwl + MISP (decided 2026-08-03)
+
+- **IntelOwl** is the enrichment engine. Deterministic code (not the LLM)
+  submits observables; IntelOwl fans out to analyzers (OTX, AbuseIPDB,
+  GreyNoise, VirusTotal/GTI, Shodan, MISP lookup, etc.) and aggregates
+  results.
+- **IntelOwl connectors** push enrichment results to both MISP and OpenCTI
+  automatically — no custom glue for the write path.
+- **MISP (already running)** provides:
+  - Warninglists + taxonomies for known-benign filtering *before* enrichment
+    (don't burn API quota enriching Googlebot or cloud-provider ranges).
+  - A second lookup source: "have my own sensors seen this before?"
+  - The community-sharing path (MISP events → sharing groups) alongside OTX.
+- **MISP ↔ OpenCTI sync** via the official OpenCTI MISP connector, one
+  direction at a time (recommend MISP → OpenCTI to start) to avoid feedback
+  loops. PyMISP for any custom scripting.
+- Enrichment order per IOC: MISP warninglist check → MISP/OpenCTI dedup
+  lookup → IntelOwl analyzer fan-out → scored result into OpenCTI (STIX) and
+  MISP event.
+
 ## Daily intel pipeline (target)
 
 1. Scheduled automation queries T-Pot ES: last-24h attack aggregations
    (top sources, new CVEs/exploits, Cowrie credentials, malware hashes).
-2. Extract novel IOCs; enrich via OTX / GTI / Falcon MCPs.
-3. Cross-reference and write curated findings into OpenCTI (STIX) via xtm-mcp.
+2. Extract novel IOCs (deterministic extractors); filter against MISP
+   warninglists; enrich via IntelOwl analyzer fan-out (OTX, GTI, Falcon,
+   AbuseIPDB, GreyNoise, MISP lookup).
+3. IntelOwl connectors write scored results to MISP and OpenCTI; curated
+   findings land in OpenCTI as STIX. (MCP servers remain the *interactive*
+   query layer for the analyst agent.)
 4. Draft Markdown intel report → commit to this repo (`notes/reports/`).
 5. Deliver summary via messaging gateway.
 
