@@ -68,6 +68,33 @@ AlienVault OTX, CrowdStrike Falcon, Google Threat Intelligence.
   shared outward to OTX/other platforms.
 - Agent server on an isolated VLAN; no credentials for anything it doesn't need.
 
+## Peer review amendments (2026-08-03, via Codex CLI / ChatGPT)
+
+Full review: `notes/reviews/2026-08-03-chatgpt-codex.md`. Accepted changes:
+
+1. **Deterministic core, LLM as analyst.** The pipeline (collection, IOC
+   extraction, dedup, STIX serialization, publication gates) is owned by
+   deterministic code; LLMs summarize, classify, cluster, and draft — they do
+   not orchestrate writes. Hermes Agent remains the interactive analyst and
+   report drafter, not the workflow authority.
+2. **Role separation**: no-tools extraction worker → read-only enrichment
+   worker → STIX writer that accepts only schema-validated bundles.
+   Memory/skill-authoring disabled for any session touching raw honeypot data.
+3. **Add to stack**: IntelOwl (enrichment fan-out), MISP warninglists + CIRCL
+   hashlookup (known-benign filtering), `cti-python-stix2`/`attackcti`
+   (proper STIX/ATT&CK handling), pySigma + YARA for detection outputs.
+4. **Prefer official OpenCTI connectors** over MCP wrappers where they exist;
+   restrict falcon-mcp to the `intel` module only.
+5. **STIX discipline**: observed-data + sightings by default; promote to
+   `indicator` only with analytic confidence; deterministic external IDs to
+   prevent duplicates; `valid_until` on everything.
+6. **Report products**: daily tactical brief + weekly analytic report with
+   ATT&CK heatmap (templates in the review doc).
+7. **Ops hardening (later phases)**: queue/checkpoint layer (Prefect or
+   Temporal) instead of bare cron; benchmark vLLM vs Ollama on the NVIDIA
+   hosts for concurrent enrichment throughput; adversarial prompt-injection
+   test corpus built from real T-Pot payloads.
+
 ## Open questions
 
 - Which box hosts the agent server (VM on one of the Linux hosts?).
