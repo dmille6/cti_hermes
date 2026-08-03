@@ -2,16 +2,24 @@
 """Submit novel honeypot IOCs from T-Pot to IntelOwl for enrichment.
 
 Deterministic: no LLM in this path. Pulls top source IPs and file hashes from
-Elasticsearch, skips anything already seen (local sqlite ledger), submits the
-remainder to IntelOwl, and writes results to JSON for the report stage.
+Elasticsearch, applies three filters, submits the remainder to IntelOwl, and
+records what was sent.
+
+Filter order (cheapest and most important first):
+  1. Reserved/private ranges           — never useful
+  2. Own infrastructure (homenet.yml)  — NEVER report yourself to the community
+  3. MISP warninglists                 — known-benign (DNS resolvers, CDNs, ...)
+  4. Already-enriched ledger           — don't re-burn API quota
 
 Usage:
-  enrich_iocs.py [--hours 24] [--max-ips 25] [--dry-run]
+  enrich_iocs.py [--hours 24] [--max-ips 25] [--dry-run] [--no-warninglists]
 """
 import argparse
+import ipaddress
 import json
 import os
 import sqlite3
+import ssl
 import sys
 import time
 import urllib.error
@@ -22,10 +30,28 @@ ES = "http://10.0.0.75:64298"
 INTELOWL = "http://127.0.0.1:80"
 LEDGER = "/home/mike/reports/ioc_ledger.sqlite"
 OUT_DIR = "/home/mike/reports/enrichment"
+HOMENET = "/home/mike/etc/homenet.json"
+MISP_CONF = "/home/mike/.misp.json"   # {"url": ..., "key": ..., "verify_tls": false}
+WL_POLICY = "/home/mike/etc/warninglist_policy.json"
 
-# Private/reserved ranges and our own infrastructure are never submitted.
-SKIP_PREFIXES = ("10.", "192.168.", "127.", "172.16.", "172.17.", "172.18.",
-                 "172.19.", "172.2", "172.30.", "172.31.", "169.254.")
+# Warninglists whose hits are recorded but NOT dropped. Datacenter/VPS ranges
+# are the classic case: MISP flags them as common false positives for generic
+# IOC feeds, but for a honeynet they are frequently real attacker infra.
+DEFAULT_ANNOTATE_ONLY = ["vpn-ipv4", "datacenter", "VPN providers"]
+
+_NOVERIFY = ssl.create_default_context()
+_NOVERIFY.check_hostname = False
+_NOVERIFY.verify_mode = ssl.CERT_NONE
+
+
+def read_json(path, default=None):
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except FileNotFoundError:
+        if default is None:
+            raise
+        return default
 
 
 def token():
@@ -45,16 +71,63 @@ def collect_iocs(hours, max_ips):
     rng = {"range": {"@timestamp": {"gte": f"now-{hours}h", "lte": "now"}}}
     r = es_search({
         "size": 0, "query": {"bool": {"filter": [rng]}},
-        "aggs": {"ips": {"terms": {"field": "src_ip.keyword", "size": max_ips * 2}}}})
-    ips = [b["key"] for b in r["aggregations"]["ips"]["buckets"]
-           if not b["key"].startswith(SKIP_PREFIXES)][:max_ips]
+        "aggs": {"ips": {"terms": {"field": "src_ip.keyword", "size": max_ips * 3}}}})
+    ips = [(b["key"], b["doc_count"]) for b in r["aggregations"]["ips"]["buckets"]]
 
     r = es_search({
         "size": 0,
         "query": {"bool": {"filter": [rng, {"exists": {"field": "shasum"}}]}},
         "aggs": {"h": {"terms": {"field": "shasum.keyword", "size": 25}}}})
-    hashes = [b["key"] for b in r["aggregations"]["h"]["buckets"]]
+    hashes = [(b["key"], b["doc_count"]) for b in r["aggregations"]["h"]["buckets"]]
     return ips, hashes
+
+
+def is_reserved(ip):
+    try:
+        a = ipaddress.ip_address(ip)
+    except ValueError:
+        return True  # not an IP at all -> don't submit
+    return (a.is_private or a.is_loopback or a.is_reserved or a.is_multicast
+            or a.is_link_local or a.is_unspecified)
+
+
+def load_homenet():
+    """Networks and IPs belonging to the operator. Never submitted anywhere."""
+    conf = read_json(HOMENET, default={"networks": [], "ips": []})
+    nets = [ipaddress.ip_network(n, strict=False) for n in conf.get("networks", [])]
+    ips = set(conf.get("ips", []))
+    return nets, ips
+
+
+def is_own(ip, nets, ips):
+    if ip in ips:
+        return True
+    try:
+        a = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    return any(a in n for n in nets)
+
+
+def misp_warninglist_hits(values):
+    """Return {value: [warninglist names]} for values matching any MISP warninglist."""
+    conf = read_json(MISP_CONF, default=None)
+    if not conf:
+        print("  (no MISP config; skipping warninglist filter)", file=sys.stderr)
+        return {}
+    req = urllib.request.Request(
+        f"{conf['url'].rstrip('/')}/warninglists/checkValue",
+        data=json.dumps(list(values)).encode(),
+        headers={"Authorization": conf["key"], "Accept": "application/json",
+                 "Content-Type": "application/json"})
+    ctx = None if conf.get("verify_tls") else _NOVERIFY
+    try:
+        with urllib.request.urlopen(req, timeout=60, context=ctx) as r:
+            data = json.load(r)
+    except Exception as e:
+        print(f"  ! MISP warninglist check failed ({e}); not filtering", file=sys.stderr)
+        return {}
+    return {v: [w.get("name") for w in hits] for v, hits in data.items() if hits}
 
 
 def ledger_conn():
@@ -67,18 +140,17 @@ def ledger_conn():
 
 def submit(observable, classification):
     body = json.dumps({
-        "observables": [[classification, observable]],
+        "observable_name": observable,
+        "observable_classification": classification,
         "tlp": "AMBER",
     }).encode()
     req = urllib.request.Request(
-        f"{INTELOWL}/api/analyze_multiple_observables", data=body,
+        f"{INTELOWL}/api/analyze_observable", data=body,
         headers={"Content-Type": "application/json",
                  "Authorization": f"Token {token()}"})
     try:
         with urllib.request.urlopen(req, timeout=60) as r:
-            resp = json.load(r)
-        results = resp.get("results", [])
-        return results[0].get("job_id") if results else None
+            return json.load(r).get("job_id")
     except urllib.error.HTTPError as e:
         print(f"  ! {observable}: HTTP {e.code} {e.read()[:200]}", file=sys.stderr)
         return None
@@ -89,25 +161,68 @@ def main():
     ap.add_argument("--hours", type=int, default=24)
     ap.add_argument("--max-ips", type=int, default=25)
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--no-warninglists", action="store_true")
     args = ap.parse_args()
 
-    ips, hashes = collect_iocs(args.hours, args.max_ips)
+    raw_ips, hashes = collect_iocs(args.hours, args.max_ips)
+    nets, own_ips = load_homenet()
+
+    dropped = {"reserved": [], "own": [], "warninglist": [], "ledger": []}
+    candidates = []
+    for ip, count in raw_ips:
+        if is_reserved(ip):
+            dropped["reserved"].append(ip)
+        elif is_own(ip, nets, own_ips):
+            dropped["own"].append(f"{ip} ({count} events)")
+        else:
+            candidates.append(ip)
+    candidates = candidates[:args.max_ips]
+
+    annotations = {}
+    if candidates and not args.no_warninglists:
+        policy = read_json(WL_POLICY, default={})
+        annotate_only = policy.get("annotate_only", DEFAULT_ANNOTATE_ONLY)
+        hits = misp_warninglist_hits(candidates)
+        drop_set = set()
+        for ip, names in hits.items():
+            soft = [n for n in names
+                    if any(pat.lower() in (n or "").lower() for pat in annotate_only)]
+            if len(soft) == len(names):
+                # every match was annotate-only -> keep, but record the context
+                annotations[ip] = names
+            else:
+                drop_set.add(ip)
+                dropped["warninglist"].append(f"{ip} [{', '.join(names[:2])}]")
+        candidates = [ip for ip in candidates if ip not in drop_set]
+        for ip, names in annotations.items():
+            print(f"  note [datacenter/VPN, still submitting]: {ip} [{names[0]}]")
+
     conn = ledger_conn()
     seen = {r[0] for r in conn.execute("SELECT ioc FROM seen")}
+    novel = [ip for ip in candidates if ip not in seen]
+    dropped["ledger"] = [ip for ip in candidates if ip in seen]
 
-    novel = [(i, "ip") for i in ips if i not in seen]
-    novel += [(h, "hash") for h in hashes if h not in seen]
+    novel_hashes = [h for h, _ in hashes if h not in seen]
+    dropped["ledger"] += [h for h, _ in hashes if h in seen]
 
-    print(f"collected {len(ips)} IPs + {len(hashes)} hashes; "
-          f"{len(novel)} novel, {len(ips) + len(hashes) - len(novel)} already enriched")
+    print(f"collected {len(raw_ips)} IPs + {len(hashes)} hashes")
+    for reason, items in dropped.items():
+        if items:
+            print(f"  dropped [{reason}]: {len(items)}")
+            for i in items[:5]:
+                print(f"      {i}")
+            if len(items) > 5:
+                print(f"      ... and {len(items) - 5} more")
+    print(f"  submitting: {len(novel)} IPs + {len(novel_hashes)} hashes")
+
     if args.dry_run:
-        for ioc, kind in novel:
-            print(f"  would submit [{kind}] {ioc}")
+        for x in novel + novel_hashes:
+            print(f"  would submit {x}")
         return
 
     submitted = []
     now = datetime.now(timezone.utc).isoformat()
-    for ioc, kind in novel:
+    for ioc, kind in [(i, "ip") for i in novel] + [(h, "hash") for h in novel_hashes]:
         job_id = submit(ioc, kind)
         if job_id:
             conn.execute("INSERT OR REPLACE INTO seen VALUES (?,?,?,?)",
@@ -120,7 +235,8 @@ def main():
     os.makedirs(OUT_DIR, exist_ok=True)
     out = f"{OUT_DIR}/{datetime.now(timezone.utc).date()}-submissions.json"
     with open(out, "w") as f:
-        json.dump(submitted, f, indent=1)
+        json.dump({"submitted": submitted, "dropped": dropped,
+                   "warninglist_annotations": annotations}, f, indent=1)
     print(f"wrote {out} ({len(submitted)} jobs)")
 
 

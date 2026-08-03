@@ -1,0 +1,4 @@
+{
+  "_comment": "MISP warninglist hits matching these substrings are RECORDED but NOT dropped. Datacenter/VPS ranges are frequently genuine attacker infrastructure in honeynet data, unlike generic IOC feeds where MISP treats them as false positives. Everything else that hits a warninglist is dropped before enrichment.",
+  "annotate_only": ["vpn-ipv4", "datacenter", "VPN providers"]
+}

@@ -1,0 +1,5 @@
+{
+  "url": "https://YOUR-MISP:8443",
+  "key": "YOUR-MISP-AUTH-KEY",
+  "verify_tls": false
+}

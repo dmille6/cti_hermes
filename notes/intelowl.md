@@ -81,9 +81,38 @@ python3 ~/bin/enrich_iocs.py --dry-run --max-ips 5   # preview
 python3 ~/bin/enrich_iocs.py --hours 24 --max-ips 25 # real run
 ```
 
+## MISP integration (2026-08-03)
+
+MISP **2.5.39** at `https://76.165.200.8:8443` (org TSEC, self-signed cert →
+`verify_tls: false`). Credentials on the VM at `~/.misp.json` (chmod 600).
+**123 warninglists, all enabled.**
+
+Bulk filtering uses `POST /warninglists/checkValue` with a JSON array of
+values — one request covers the whole batch and returns which lists matched.
+
+### Filter chain in `enrich_iocs.py`
+
+1. **Reserved/private** ranges — dropped.
+2. **Own infrastructure** (`~/etc/homenet.json`) — dropped, never submitted
+   anywhere. Seeded from `t-pot_ip_ext` values observed in Elasticsearch.
+3. **MISP warninglists** — dropped, *except* lists named in
+   `~/etc/warninglist_policy.json` under `annotate_only`.
+4. **Ledger** (`~/reports/ioc_ledger.sqlite`) — already enriched, skipped.
+
+### Why `annotate_only` exists
+
+MISP's "vpn-ipv4 addresses belonging to common VPN providers and datacenters"
+list matched 9 DigitalOcean IPs in the first live run. For a generic IOC feed
+those are noise; for a **honeynet they are frequently real attackers** — VPS-
+hosted scanners are the norm. So datacenter/VPN hits are recorded as context
+in the submissions JSON but still get enriched. Everything else that hits a
+warninglist is dropped.
+
+Example configs live in `src/etc.example/` (the real ones hold secrets and
+stay on the VM).
+
 ## Next
 
-- Wire MISP warninglist pre-filtering ahead of submission (avoid enriching
-  known-benign scanners/cloud ranges).
 - Enable IntelOwl connectors to push results into MISP and OpenCTI.
 - Join enrichment output into the daily brief.
+- Confirm the homenet list is complete before any outbound sharing.
