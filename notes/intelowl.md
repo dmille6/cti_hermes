@@ -142,7 +142,14 @@ IntelOwl embeds API keys in analyzer error messages (e.g. the full Shodan URL
 with `?key=...` appears in job error output). Treat job errors as sensitive;
 don't paste them into tickets or share job JSON externally.
 
+## Operating mode: PULL-ONLY
+
+All connectors are disabled (`ConnectorConfig.objects.update(disabled=True)`):
+AbuseSubmitter, EmailSender, MISP, OpenCTI, Slack, YETI. IntelOwl enriches and
+stores locally; nothing is written back to MISP or OpenCTI. Re-enabling any of
+these requires an explicit operator decision.
+
 ## Next
 
-- Enable IntelOwl connectors to push results into MISP and OpenCTI.
+- (Deferred, needs operator sign-off) connectors into MISP/OpenCTI.
 - Join enrichment output into the daily brief.

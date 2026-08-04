@@ -50,14 +50,23 @@ Intelligence.
 - Optional: LiteLLM proxy on the agent server as a single OpenAI-compatible
   gateway routing to all three Ollama hosts.
 
+## ⚠️ OPERATING MODE: PULL-ONLY (operator directive, 2026-08-03)
+
+**The system reads and reports. It does not write to MISP or OpenCTI.**
+All IntelOwl connectors (MISP, OpenCTI, YETI, AbuseSubmitter, EmailSender,
+Slack) are DISABLED. The OpenCTI account is read-only (KNOWLEDGE capability;
+writes verified to return FORBIDDEN_ACCESS). Sections below that describe
+connectors writing into MISP/OpenCTI describe a LATER phase — do not
+implement them until the operator lifts this directive.
+
 ## Enrichment layer: IntelOwl + MISP (decided 2026-08-03)
 
 - **IntelOwl** is the enrichment engine. Deterministic code (not the LLM)
   submits observables; IntelOwl fans out to analyzers (OTX, AbuseIPDB,
   GreyNoise, VirusTotal/GTI, Shodan, MISP lookup, etc.) and aggregates
   results.
-- **IntelOwl connectors** push enrichment results to both MISP and OpenCTI
-  automatically — no custom glue for the write path.
+- **IntelOwl connectors** *would* push enrichment results to MISP and OpenCTI
+  — **currently DISABLED (pull-only).** Deferred to a later phase.
 - **MISP (already running)** provides:
   - Warninglists + taxonomies for known-benign filtering *before* enrichment
     (don't burn API quota enriching Googlebot or cloud-provider ranges).
