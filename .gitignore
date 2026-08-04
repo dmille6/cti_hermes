@@ -25,3 +25,6 @@ env/
 
 # Local-only tool state
 .claude/settings.local.json
+
+# Local copy of the tsec platform docs from cti1 — reference only, never commit
+cti1-docs/
