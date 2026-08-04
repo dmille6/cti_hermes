@@ -15,15 +15,15 @@ import ipaddress
 import json
 import os
 import re
-import subprocess
 import sys
 import urllib.request
+
+import llm
 from datetime import date
 
 ES = "http://10.0.0.75:64298"
 INTELOWL = "http://127.0.0.1:80"
 OUT_DIR = "/home/mike/reports"
-HERMES_TIMEOUT = 900
 
 HOMENET = "/home/mike/etc/homenet.json"
 
@@ -510,17 +510,15 @@ def main():
 
     ev["attack_menu"] = ATTACK_MENU
     tables = render_tables(ev)
-    prompt = PROMPT.format(evidence=json.dumps(ev, indent=1))
-    env = {**os.environ,
-           "PATH": "/home/mike/.local/bin:/home/mike/.hermes/bin:" + os.environ.get("PATH", "")}
-    r = subprocess.run(["/home/mike/.local/bin/rawingest", "-z", prompt],
-                       capture_output=True, text=True, timeout=HERMES_TIMEOUT, env=env)
-    prose = (r.stdout or "").strip()
-    if r.returncode != 0 or "## Executive Summary" not in prose:
+    prose, meta = llm.narrate(PROMPT.format(evidence=json.dumps(ev, indent=1)),
+                              required_marker="## Executive Summary")
+    if not prose:
         with open(f"{OUT_DIR}/{today}-daily-brief.FAILED.log", "w") as f:
-            f.write(f"rc={r.returncode}\nSTDOUT:\n{prose}\nSTDERR:\n{r.stderr}")
-        print(f"FAILED — see {today}-daily-brief.FAILED.log", file=sys.stderr)
+            f.write(f"narrative step failed: {meta.get('error')}\n")
+        print(f"FAILED — {meta.get('error')}", file=sys.stderr)
         sys.exit(1)
+    print(f"  {meta['model']} — {meta['seconds']}s, "
+          f"{meta['usage'].get('completion_tokens')} tokens")
 
     bogus = validate_attack_ids(prose)
     if bogus:

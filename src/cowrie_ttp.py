@@ -23,15 +23,15 @@ import hashlib
 import json
 import os
 import re
-import subprocess
 import sys
 import urllib.request
+
+import llm
 from collections import defaultdict
 from datetime import date, datetime, timezone
 
 ES = "http://10.0.0.75:64298"
 OUT_DIR = "/home/mike/reports"
-LLM_TIMEOUT = 900
 
 # Sensor host -> the sector an adversary would believe they had reached.
 # This mapping is what makes cross-sector differential analysis possible;
@@ -354,14 +354,12 @@ def main():
             parts.append("Payloads: " + ", ".join(f"`{h[:16]}…`" for h in c["payload_hashes"][:4]))
 
     if not args.no_llm:
-        print("asking the analyst model to interpret clusters…")
-        prompt = PROMPT.format(evidence=json.dumps(ev, indent=1))
-        env = {**os.environ,
-               "PATH": "/home/mike/.local/bin:/home/mike/.hermes/bin:" + os.environ.get("PATH", "")}
-        r = subprocess.run(["/home/mike/.local/bin/rawingest", "-z", prompt],
-                           capture_output=True, text=True, timeout=LLM_TIMEOUT, env=env)
-        prose = (r.stdout or "").strip()
-        if r.returncode == 0 and "## Cluster Analysis" in prose:
+        print("asking the narrative model to interpret clusters…")
+        prose, meta = llm.narrate(PROMPT.format(evidence=json.dumps(ev, indent=1)),
+                                  required_marker="## Cluster Analysis")
+        if prose:
+            print(f"  {meta['model']} — {meta['seconds']}s, "
+                  f"{meta['usage'].get('completion_tokens')} tokens")
             valid = {x["id"] for x in ATTACK_MENU}
             bogus = sorted(set(re.findall(r"\bT1\d{3}(?:\.\d{3})?\b", prose)) - valid)
             if bogus:
@@ -371,10 +369,8 @@ def main():
                 print(f"  warning: off-menu ATT&CK ids: {bogus}", file=sys.stderr)
             parts.insert(2, "\n" + prose[prose.index("## Cluster Analysis"):])
         else:
-            with open(f"{OUT_DIR}/{stamp}-cowrie-ttp.FAILED.log", "w") as f:
-                f.write(f"rc={r.returncode}\n{prose}\n---\n{r.stderr}")
-            print("  LLM step failed; writing deterministic sections only",
-                  file=sys.stderr)
+            print(f"  narrative step failed ({meta.get('error')}); "
+                  f"writing deterministic sections only", file=sys.stderr)
 
     out = f"{OUT_DIR}/{stamp}-cowrie-ttp.md"
     with open(out, "w") as f:

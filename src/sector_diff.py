@@ -21,14 +21,14 @@ import argparse
 import json
 import os
 import re
-import subprocess
 import sys
 import urllib.request
+
+import llm
 from datetime import date
 
 ES = "http://10.0.0.75:64298"
 OUT_DIR = "/home/mike/reports"
-LLM_TIMEOUT = 900
 
 SECTORS = {
     "db1lapetro": "petrochemical",
@@ -376,19 +376,16 @@ def main():
              "\n## ASN Skew\n" + tables["asns"]]
 
     if not args.no_llm:
-        print("asking the analyst model to interpret…")
-        prompt = PROMPT.format(evidence=json.dumps(ev, indent=1))
-        env = {**os.environ,
-               "PATH": "/home/mike/.local/bin:/home/mike/.hermes/bin:" + os.environ.get("PATH", "")}
-        r = subprocess.run(["/home/mike/.local/bin/rawingest", "-z", prompt],
-                           capture_output=True, text=True, timeout=LLM_TIMEOUT, env=env)
-        prose = (r.stdout or "").strip()
-        if r.returncode == 0 and "## Sector Differentials" in prose:
+        print("asking the narrative model to interpret…")
+        prose, meta = llm.narrate(PROMPT.format(evidence=json.dumps(ev, indent=1)),
+                                  required_marker="## Sector Differentials")
+        if prose:
+            print(f"  {meta['model']} — {meta['seconds']}s, "
+                  f"{meta['usage'].get('completion_tokens')} tokens")
             parts.insert(2, "\n" + prose[prose.index("## Sector Differentials"):])
         else:
-            with open(f"{OUT_DIR}/{stamp}-sector-diff.FAILED.log", "w") as f:
-                f.write(f"rc={r.returncode}\n{prose}\n---\n{r.stderr}")
-            print("  LLM step failed; deterministic sections only", file=sys.stderr)
+            print(f"  narrative step failed ({meta.get('error')}); "
+                  f"deterministic sections only", file=sys.stderr)
 
     out = f"{OUT_DIR}/{stamp}-sector-diff.md"
     with open(out, "w") as f:

