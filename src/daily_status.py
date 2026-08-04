@@ -26,9 +26,10 @@ from datetime import date, datetime, timedelta, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import findings  # noqa: E402
+import hive
 import llm  # noqa: E402
 
-ES = "http://10.0.0.75:64298"
+# Endpoint resolved at runtime — see hive.py (internal vs external address).
 OUT_DIR = "/home/mike/reports"
 SECTORS = {
     "db1lapetro": "petrochemical", "db4lamedtech": "medical technology",
@@ -38,7 +39,7 @@ SECTORS = {
 
 
 def es(body):
-    req = urllib.request.Request(f"{ES}/logstash-*/_search",
+    req = urllib.request.Request(f"{hive.resolve()}/logstash-*/_search",
                                  data=json.dumps(body).encode(),
                                  headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=60) as r:

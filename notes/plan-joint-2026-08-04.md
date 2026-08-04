@@ -108,12 +108,21 @@ dropped downstream, which is a much cheaper fix than new ingestion.
    "MISP distribution still org-only", "Suricata cursor risk present".
 8. **Alerting last**, on finding-state transitions and health failures only.
 
-## Before any of it: verify which hive is authoritative
+## ~~Hive question~~ — RESOLVED 2026-08-04
 
-`CLAUDE.md` on cti1 names the hive as **99.18.26.20**; every cti_hermes
-analytic queries **10.0.0.75 (`hivev2`)**. Until that is resolved, our numbers
-may describe a different population than the platform's. **Highest-priority
-open question.**
+**Same cluster, two addresses.** `10.0.0.75:64298` (internal LAN) and
+`99.18.26.20:64298` (external) are the same Elasticsearch, cluster uuid
+`ObLBKZ6ySXWsI1fI_n1y9w`. cti1 (76.165.200.190) is off-LAN so it uses the
+external address; ctihermes is on-LAN so it uses the internal one. Neither is
+reachable from the other side.
+
+**All prior cti_hermes analysis was therefore against the correct
+population** — no restatement needed.
+
+`src/hive.py` now resolves the endpoint at runtime and **verifies the cluster
+uuid**, so a script pointed at the wrong cluster fails loudly instead of
+quietly reporting on a different population. Override with `CTI_ES_URL` or
+`~/etc/hive.json`.
 
 ## What I got wrong
 

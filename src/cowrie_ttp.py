@@ -27,11 +27,12 @@ import sys
 import urllib.request
 
 import findings
+import hive
 import llm
 from collections import defaultdict
 from datetime import date, datetime, timezone
 
-ES = "http://10.0.0.75:64298"
+# Endpoint resolved at runtime — see hive.py (internal vs external address).
 OUT_DIR = "/home/mike/reports"
 
 # Sensor host -> the sector an adversary would believe they had reached.
@@ -75,7 +76,7 @@ ATTACK_MENU = [
 
 def es_search(body, index="logstash-*"):
     req = urllib.request.Request(
-        f"{ES}/{index}/_search", data=json.dumps(body).encode(),
+        f"{hive.resolve()}/{index}/_search", data=json.dumps(body).encode(),
         headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=120) as r:
         return json.load(r)

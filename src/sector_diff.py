@@ -25,10 +25,11 @@ import sys
 import urllib.request
 
 import findings
+import hive
 import llm
 from datetime import date
 
-ES = "http://10.0.0.75:64298"
+# Endpoint resolved at runtime — see hive.py (internal vs external address).
 OUT_DIR = "/home/mike/reports"
 
 SECTORS = {
@@ -45,7 +46,7 @@ MONITORING = {"Suricata", "P0f", "Fatt"}
 
 def es(body, index="logstash-*"):
     req = urllib.request.Request(
-        f"{ES}/{index}/_search", data=json.dumps(body).encode(),
+        f"{hive.resolve()}/{index}/_search", data=json.dumps(body).encode(),
         headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=180) as r:
         return json.load(r)

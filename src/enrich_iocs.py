@@ -24,9 +24,11 @@ import sys
 import time
 import urllib.error
 import urllib.request
+
+import hive
 from datetime import datetime, timezone
 
-ES = "http://10.0.0.75:64298"
+# Endpoint resolved at runtime — see hive.py (internal vs external address).
 INTELOWL = "http://127.0.0.1:80"
 LEDGER = "/home/mike/reports/ioc_ledger.sqlite"
 OUT_DIR = "/home/mike/reports/enrichment"
@@ -80,7 +82,7 @@ def token():
 
 def es_search(body, index="logstash-*"):
     req = urllib.request.Request(
-        f"{ES}/{index}/_search", data=json.dumps(body).encode(),
+        f"{hive.resolve()}/{index}/_search", data=json.dumps(body).encode(),
         headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=60) as r:
         return json.load(r)
