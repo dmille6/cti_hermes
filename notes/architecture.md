@@ -10,7 +10,10 @@ produce intelligence reports and findings — all inference local via Ollama.
 
 | Host | Hardware | Role |
 |------|----------|------|
-| Mac Studio | M4 Max, 128 GB RAM | Primary reasoning/report model (large model via Ollama) |
+| MacBook Pro (`darrells-mbp-2`, 10.0.0.61) | **M5 Max**, 128 GB RAM | Currently serving Ollama for the pipeline — this is the operator's LAPTOP, not a server. To be moved off. |
+| Mac Studio | M4 Max, 128 GB RAM | Intended primary reasoning/report host — **not yet located on the network** |
+| Mac Mini (`m4mini`, 10.0.0.70) | M4 | Ollama running, only qwen2.5-coder:7b present |
+| Unidentified (10.0.0.72) | ? | Ollama running: qwen2.5-coder:14b, qwen2.5:14b-instruct, nomic-embed-text — likely the RTX 5080 box |
 | Linux #1 | RTX 5080, 16 GB VRAM | Fast small-model tasks: IOC extraction, enrichment, embeddings |
 | Linux #2 | RTX A6000, 48 GB VRAM | Workhorse mid/large model (pending setup) |
 | Agent server | VM `ctihermes` @ 10.0.0.120 — 8 vCPU, 16 GB RAM, 195 GB disk, Ubuntu 24.04 | Hermes Agent + IntelOwl + MCP servers; talks to Ollama over OpenAI-compatible API |
@@ -41,8 +44,10 @@ Intelligence.
 
 ## Model assignments (initial)
 
-- **Mac Studio (128 GB)**: Hermes 4 70B q4 (~40 GB) — the model the agent
-  framework is tuned for — or gpt-oss-120b. Report drafting, deep reasoning.
+- **Mac Studio M4 Max (128 GB)**: Hermes 4 70B q4 (~40 GB) — the model the
+  agent framework is tuned for — or gpt-oss-120b. Report drafting, deep
+  reasoning. NOTE: the pipeline is currently pointed at the operator's
+  MacBook Pro (10.0.0.61) as a stopgap; move to the Studio.
 - **A6000 (48 GB)**: Hermes 4 70B q4 or Qwen3-32B. Enrichment/tool-calling
   workhorse once online.
 - **RTX 5080 (16 GB)**: Qwen3-14B / Foundation-Sec-8B (Cisco security-tuned)
