@@ -50,6 +50,14 @@ Intelligence.
 - Optional: LiteLLM proxy on the agent server as a single OpenAI-compatible
   gateway routing to all three Ollama hosts.
 
+## ⚠️ READ FIRST: the operator already runs a mature tsec pipeline
+
+See `notes/existing-tsec-pipeline.md`. GTI enrichment is at 100%, AbuseIPDB/
+MaxMind/FireHOL at 82.3%, LLM at 95.9%; novelty is tracked across all 123k
+IPs in `tsec-observatory-*`; every event carries an `ip_rep` label. **Do not
+rebuild enrichment, novelty tracking, feed submission, or malware handling.**
+cti_hermes is the adversary-behaviour analysis and reporting layer on top.
+
 ## ⚠️ OPERATING MODE: PULL-ONLY (operator directive, 2026-08-03)
 
 **The system reads and reports. It does not write to MISP or OpenCTI.**
